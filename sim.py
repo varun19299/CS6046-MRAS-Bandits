@@ -12,13 +12,120 @@ ex = Experiment("regret-minimisation")
 
 @ex.config
 def config():
-    n = 10000  # event horizon
-    repeat = 100  # repeat the experiment 100 times.
+    n = 2000  # event horizon
+    repeat = 10  # repeat the experiment 100 times.
     games = [0, 0, 0, 0]  # Bernouli distributed
     games[0] = [0.5, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4]
     games[1] = [0.5, 0.48, 0.48, 0.48, 0.48, 0.48, 0.48, 0.48, 0.48, 0.48]
     games[2] = [0.5, 0.2, 0.1]
     games[3] = [0.5, 0.4, 0.3, 0.42, 0.35, 0.22, 0.33]
+
+
+def get_phases_pulls(n):
+    n_ll = np.arange(5, n + 1)[1:]
+    sum = 0
+    phases = []
+    pulls = []
+    i = 0
+    while True:
+        if sum + n_ll[i] > n:
+            n_ll[i] = n - sum
+            phases.append(n_ll[i])
+            pulls.append(1)
+            break
+        else:
+            sum += n_ll[i]
+            phases.append(n_ll[i])
+            pulls.append(1)
+        i += 1
+
+    return np.array(phases), np.array(pulls)
+
+
+def G(phase, sample_mean, theta, C=1):
+    '''
+    Vectorised op
+    :param sample_means:
+    :param theta:
+    :param C:
+    :return:
+    '''
+    num = np.exp(C * phase * sample_mean)
+    theta[np.where(theta == 0)] = C
+    return num / theta
+
+
+def MRAS(args, game_i, l=0.2, pbar=None):
+    game_ll = args.games[game_i]
+    game = Game(game_ll)
+    best_reward, best_arm = np.max(game.game_ll), np.argmax(game.game_ll)
+
+    regret_ll = np.zeros(args.n)
+    var_regret_ll = np.zeros(args.n)
+    arm_ll = np.zeros((len(game), args.n))
+
+    for exp in range(args.repeat):
+        ###########################################
+        # 0. Rewards collected and optimal arm pull (for experiment)
+        ###########################################
+
+        reward_exp_ll = np.zeros(args.n)
+        arm_exp_ll = np.zeros(args.n)
+        regret_exp_ll = np.zeros(args.n)
+        sample_mean = np.zeros(len(game))
+        n_pulls = np.zeros(len(game))
+
+        theta_0 = 1 / len(game) * np.ones(len(game))
+        theta = 1 / len(game) * np.ones(len(game))
+
+        phases = args.n // len(game) * [len(game)]
+        if args.n % len(game):
+            phases += [args.n % len(game)]
+        phases = np.array(phases)
+        pulls = np.ones_like(phases)
+        # phases, pulls = get_phases_pulls(args.n)
+
+        t = 0
+        for j in range(len(phases)):
+            # Between 0 and len(game) (not included upper)
+            dist = (1 - l) * theta + l * theta_0
+            print(f"Arms dist {dist}")
+            arms = np.random.choice(len(game), phases[j], p=dist)
+            mask = np.zeros(len(game))
+
+            for arm in arms:
+                for _ in range(pulls[j]):
+                    reward = game.get_reward(arm)
+                    reward_exp_ll[t] = reward
+                    mask[arm] += 1
+                    regret_exp_ll[t] = best_reward - reward
+                    n_pulls[arm] += 1
+                    sample_mean[arm] += (reward - sample_mean[arm]) / n_pulls[arm]
+                    t += 1
+
+                    if t >= args.n:
+                        break
+
+            ###########################################
+            # 1. Update theta
+            ###########################################
+            theta = G(j + 1, sample_mean, theta) * mask
+            theta = theta / theta.sum()
+            # theta_0 += (theta - theta_0) / (j + 1)
+
+            print(f"Phase {j + 1} Arms {arms} theta {theta}")
+
+        regret_exp_ll = np.cumsum(regret_exp_ll)
+        regret_ll += regret_exp_ll
+        # print(f"Regret {regret_exp_ll}")
+
+    regret_ll = regret_ll / args.repeat
+
+    var_regret_ll /= args.repeat
+    var_regret_ll -= regret_ll ** 2
+    var_regret_ll /= np.arange(1, args.n + 1)
+    var_regret_ll = np.sqrt(var_regret_ll)
+    print(f"Overall regret {regret_ll}")
 
 
 def UCB(args, game_i, alpha=0.2, pbar=None):
@@ -156,7 +263,8 @@ def TS_beta(args, game_i, params, pbar=None):
             alpha_arms[arm_to_pull] += reward
             beta_arms[arm_to_pull] += 1 - reward
 
-        pbar.set_description(f"Game_{game_i + 1}_TS_Beta_{params}_exp_{exp}_arm_{arm_to_pull}")
+        if pbar:
+            pbar.set_description(f"Game_{game_i + 1}_TS_Beta_{params}_exp_{exp}_arm_{arm_to_pull}")
         regret_exp_ll = np.cumsum(regret_exp_ll)
         regret_ll += regret_exp_ll
         var_regret_ll += regret_exp_ll ** 2
@@ -260,34 +368,38 @@ def main(_run):
     if not os.path.exists("logs"):
         os.mkdir("logs")
 
-    pbar = tqdm(range(3))
-    for game_i in pbar:
-        D = {}
+    MRAS(args, game_i=0, l=0.1)
+    regret_ll, _, _ = TS_beta(args, game_i=0, params=(1, 1), pbar=tqdm(range(3)))
+    print(f"TS regret {regret_ll}")
 
-        for alpha in [0.5, 2, 5]:
-            regret_ll, var_regret_ll = UCB(args, game_i, alpha, pbar)
-            d = {}
-            d['regret'] = regret_ll
-            d['var'] = var_regret_ll
-            D[f'UCB-alpha={alpha}'] = d
-
-        for params in [(1, 1), (0.2, 0.8)]:
-            regret_ll, var_regret_ll, arms_ll = TS_beta(args, game_i, params, pbar)
-            d = {}
-            d['regret'] = regret_ll
-            d['var'] = var_regret_ll
-            d['arms_ll'] = arms_ll
-            D[f'TS-beta-params-{params}'] = d
-
-        gap_indep, gap_dep = regret_lower_bounds(args, game_i)
-
-        d['regret'] = gap_indep
-        d['var'] = np.zeros_like(gap_indep)
-        D['gap-indpendent-minimax'] = d
-
-        d['regret'] = gap_dep
-        d['var'] = np.zeros_like(gap_dep)
-        D['gap-dependent-minimax'] = d
-
-        plot_regret(D, game_i, args, supress=True)
-        plot_prob_arm(D, game_i, args, supress=True)
+    # pbar = tqdm(range(3))
+    # for game_i in pbar:
+    #     D = {}
+    #
+    #     for alpha in [0.5, 2, 5]:
+    #         regret_ll, var_regret_ll = UCB(args, game_i, alpha, pbar)
+    #         d = {}
+    #         d['regret'] = regret_ll
+    #         d['var'] = var_regret_ll
+    #         D[f'UCB-alpha={alpha}'] = d
+    #
+    #     for params in [(1, 1), (0.2, 0.8)]:
+    #         regret_ll, var_regret_ll, arms_ll = TS_beta(args, game_i, params, pbar)
+    #         d = {}
+    #         d['regret'] = regret_ll
+    #         d['var'] = var_regret_ll
+    #         d['arms_ll'] = arms_ll
+    #         D[f'TS-beta-params-{params}'] = d
+    #
+    #     gap_indep, gap_dep = regret_lower_bounds(args, game_i)
+    #
+    #     d['regret'] = gap_indep
+    #     d['var'] = np.zeros_like(gap_indep)
+    #     D['gap-indpendent-minimax'] = d
+    #
+    #     d['regret'] = gap_dep
+    #     d['var'] = np.zeros_like(gap_dep)
+    #     D['gap-dependent-minimax'] = d
+    #
+    #     plot_regret(D, game_i, args, supress=True)
+    #     plot_prob_arm(D, game_i, args, supress=True)
