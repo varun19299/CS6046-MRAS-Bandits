@@ -1,0 +1,6 @@
+numpy
+scipy
+sacred
+matplotlib
+pyyaml
+tqdm
