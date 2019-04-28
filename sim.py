@@ -12,18 +12,7 @@ from bandits.MRAS import MRAS_Categorical
 from bandits.TS_beta import TS_beta
 
 ex = Experiment("regret-minimisation")
-ex.add_config('base-config.yaml')
-
-# @ex.config
-# def config():
-#     n = 2000  # event horizon
-#     repeat = 10  # repeat the experiment 100 times.
-#     games = [0, 0, 0, 0]  # Bernouli distributed
-#     games[0] = [0.5, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4]
-#     games[1] = [0.5, 0.48, 0.48, 0.48, 0.48, 0.48, 0.48, 0.48, 0.48, 0.48]
-#     games[2] = [0.5, 0.2, 0.1]
-#     games[3] = [0.5, 0.4, 0.3, 0.42, 0.35, 0.22, 0.33]
-
+ex.add_config('configs/base-config.yaml')
 
 def plot_regret(D, game, args, supress=False):
     '''
