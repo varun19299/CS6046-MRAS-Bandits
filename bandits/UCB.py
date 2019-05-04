@@ -102,5 +102,5 @@ def main(_run):
     print(f"Configs used {args}")
     args = tupperware(args)
 
-    regret_ll, var_regret_ll = UCB(args, game_i=0, alpha=2, pbar=None)
+    regret_ll, var_regret_ll = UCB(args, game_i=1, alpha=2, pbar=None)
     print(f"UCB regret {regret_ll}")
