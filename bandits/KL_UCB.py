@@ -7,32 +7,33 @@ Created on Sun May  5 14:08:59 2019
 
 import numpy as np
 from scipy.stats import multivariate_normal
+from scipy.stats import entropy
 from sacred import Experiment
-from utils.tupperware import tupperware
+from tupperware import tupperware
 import matplotlib.pyplot as plt
-from utils import helper
-from tqdm import tqdm
-from utils.helper import Game
+#from utils import helper
+#from tqdm import tqdm
+from Game import Game
 import os
 
-ex = Experiment("MRAS-regret-minimisation")
+ex = Experiment("KL_UCB-regret-minimisation")
 ex.add_config('configs/base-config.yaml')
 
 
 def KL_div(a,b):
-    if a!=0 and b!=0 and b!=1 and a!=1:
-        return a*np.log(a/b)+(1-a)*np.log((1-a)/(1-b))
-    elif a==1 and b!=0:
-        return -np.log(b)
-    else:
-        return 0.0001
+    pk = [a, 1-a]
+    qk = [b,1-b]
+    return entropy(pk,qk)
 def maxQ(p,C):
+    #print (p)
     qlist = []
-    eps = 0.001
-    for i in range(1,1000):
-        a = KL_div(p,i*eps)-C
+    eps = 0.01
+    for i in range(1,100):
+        a = KL_div(p,i*eps)
+        #print (a)
         qlist.append(a)
-    q1 = np.argwhere(np.array(qlist)<0)
+    #print (qlist)
+    q1 = np.argwhere(np.array(qlist)<C)
     qlist1 = np.array(qlist)[q1]
     q2 = np.argmax(qlist1)
     return (q1[q2]+1)*eps
@@ -71,10 +72,13 @@ def KL_UCB(args, game_i, l=0.2, pbar=None):
                 C = np.log(1+t*np.log(t)*np.log(t))/times[i]
                 p = samples[i]/times[i]
                 conf_vector[i] = maxQ(p,C)
+            print (conf_vector)
             arm = np.argmax(conf_vector)
             arm_exp_ll[t] = arm
             reward_exp_ll[t] = game.get_reward(arm)
             regret_exp_ll[t] = best_reward- reward_exp_ll[t]
+            samples[arm]+= reward_exp_ll[t]
+            times[arm]+=1
             
         regret_exp_ll = np.cumsum(regret_exp_ll)
         regret_ll += regret_exp_ll
