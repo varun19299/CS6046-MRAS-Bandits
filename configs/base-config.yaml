@@ -2,7 +2,7 @@
 exp_name: 'base-config'
 
 # event horizon
-n: 2000
+n: 10000
 # repeat the experiment 100 times.
 repeat: 100
 # Bernouli distributed

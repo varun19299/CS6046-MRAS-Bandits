@@ -33,18 +33,52 @@ def get_phases_pulls(n):
     return np.array(phases), np.array(pulls)
 
 
-def G(phase, sample_mean, theta, C=1):
+def update_Categorical(phase, theta, sample_mean, mask, C=10, epsilon=1e-12, upper=1e12):
     '''
     Vectorised op
     :param sample_means:
-    :param theta:
-    :param C:
-    :return:
+    :param theta: Categorical params
+    :param C: constant for exp
+    :return: theta
     '''
-    num = np.exp(C * phase * sample_mean)
+    num = np.exp(C * phase * sample_mean, dtype = np.float128)
     theta[np.where(theta == 0)] = C
-    return num / theta
 
+    # small epsilon for ill conditioned
+    theta = num / theta
+    theta = theta * mask + epsilon
+    theta = theta / theta.sum()
+
+    return theta.astype(np.float64)
+
+
+def update_Dirchlet(phase, theta, sample_mean, arms1, C=1, summation=1000, epsilon=1e-12):
+    '''
+    Dirchelt update
+    :param phase: current phase
+    :param theta: dirichlet params
+    :param sample_mean:
+    :param arms1: contains n_k * K array
+    :param C: constant for exp
+    :param summation: homogenity assumption
+    :param epsilon: small float value to prevent ill conditioning
+    :return: thetas
+    '''
+    num = np.zeros_like(theta)
+    denom = np.zeros_like(theta)
+    # a_ll = np.argmax(arms1, axis=1)
+    # num = np.sum(np.exp(C * (phase + 1) * sample_mean[a_ll], dtype = np.float128) * np.log(arms1) / (dirichlet.pdf(arms1.T, theta) + epsilon), axis = 0)
+    # denom = np.sum(np.exp(C * (phase + 1) * sample_mean[a_ll], dtype=np.float128) / dirichlet.pdf(arms1.T, theta) + epsilon, axis = 0)
+
+    for arm in arms1:
+        a = np.argmax(arm)
+        num += np.exp(C * (phase + 1) * sample_mean[a], dtype = np.float128) * (np.log(arm)) / (dirichlet.pdf(arm, theta) + epsilon)
+        denom += np.exp(C * (phase + 1) * sample_mean[a], dtype = np.float128) / (dirichlet.pdf(arm, theta) + epsilon)
+
+    theta = summation * np.exp(num / denom)
+    theta = np.around(theta)
+    theta[np.where(theta == 0)] = epsilon
+    return theta.astype(np.float64)
 
 def MRAS_Categorical(args, game_i, l=0.2, pbar=None):
     game_ll = args.games[game_i]
@@ -54,11 +88,12 @@ def MRAS_Categorical(args, game_i, l=0.2, pbar=None):
     regret_ll = np.zeros(args.n)
     var_regret_ll = np.zeros(args.n)
     arm_ll = np.zeros((len(game), args.n))
+    theta_0 = 1 / len(game) * np.ones(len(game))
 
     for exp in range(args.repeat):
-        ###########################################
-        # 0. Rewards collected and optimal arm pull (for experiment)
-        ###########################################
+        ############################################################
+        # 1. Rewards collected and optimal arm pull (for experiment)
+        ############################################################
 
         reward_exp_ll = np.zeros(args.n)
         arm_exp_ll = np.zeros(args.n)
@@ -66,9 +101,14 @@ def MRAS_Categorical(args, game_i, l=0.2, pbar=None):
         sample_mean = np.zeros(len(game))
         n_pulls = np.zeros(len(game))
 
-        theta_0 = 1 / len(game) * np.ones(len(game))
-        theta = 1 / len(game) * np.ones(len(game))
+        ############################################################
+        # 2. Initialise Theta
+        ############################################################
+        theta = theta_0
 
+        ############################################################
+        # 3. Set phase
+        ############################################################
         phases = args.n // len(game) * [len(game)]
         if args.n % len(game):
             phases += [args.n % len(game)]
@@ -79,8 +119,10 @@ def MRAS_Categorical(args, game_i, l=0.2, pbar=None):
         t = 0
         for j in range(len(phases)):
             # Between 0 and len(game) (not included upper)
+            ############################################################
+            # 4. Pull n_k arms, M_k times each
+            ############################################################
             dist = (1 - l) * theta + l * theta_0
-            print(f"Arms dist {dist}")
             arms = np.random.choice(len(game), phases[j], p=dist)
             mask = np.zeros(len(game))
 
@@ -98,17 +140,19 @@ def MRAS_Categorical(args, game_i, l=0.2, pbar=None):
                         break
 
             ###########################################
-            # 1. Update theta
-            ###########################################
-            theta = G(j + 1, sample_mean, theta) * mask
-            theta = theta / theta.sum()
-            # theta_0 += (theta - theta_0) / (j + 1)
+            # 5. Update theta
+            ##########################################
+            theta = update_Categorical(j + 1, theta, sample_mean, mask)
 
-            print(f"Phase {j + 1} Arms {arms} theta {theta}")
+            if not pbar:
+                pass
+                # print(f"Phase {j + 1} Arms {arms} theta {theta}")
+            else:
+                pbar.set_description(f"Game {game_i + 1} Exp {exp} Phase {j + 1} Arms {arms}")
 
         regret_exp_ll = np.cumsum(regret_exp_ll)
         regret_ll += regret_exp_ll
-        # print(f"Regret {regret_exp_ll}")
+        print(f"Phase {j + 1} Arms {arms} theta {theta}")
 
     regret_ll = regret_ll / args.repeat
 
@@ -119,29 +163,33 @@ def MRAS_Categorical(args, game_i, l=0.2, pbar=None):
     print(f"Overall regret {regret_ll}")
 
 
-def MRAS_Dirichlet(args, game_i, l=0.2, pbar=None, summation=1000):
+def MRAS_Dirichlet(args, game_i, l=0.2, pbar=None):
     game_ll = args.games[game_i]
     game = Game(game_ll)
     best_reward, best_arm = np.max(game.game_ll), np.argmax(game.game_ll)
 
     regret_ll = np.zeros(args.n)
     var_regret_ll = np.zeros(args.n)
-    arm_ll = np.zeros((len(game), args.n))
+    theta_0 = np.ones(len(game)) * 10
 
     for exp in range(args.repeat):
-        ###########################################
-        # 0. Rewards collected and optimal arm pull (for experiment)
-        ###########################################
+        ############################################################
+        # 1. Rewards collected and optimal arm pull (for experiment)
+        ############################################################
 
         reward_exp_ll = np.zeros(args.n)
-        arm_exp_ll = np.zeros(args.n)
         regret_exp_ll = np.zeros(args.n)
         sample_mean = np.zeros(len(game))
         n_pulls = np.zeros(len(game))
 
-        theta_0 = np.ones(len(game))
+        ############################################################
+        # 2. Initialise Theta
+        ############################################################
         theta = theta_0
 
+        ############################################################
+        # 3. Set phase
+        ############################################################
         phases = args.n // len(game) * [len(game)]
         if args.n % len(game):
             phases += [args.n % len(game)]
@@ -152,9 +200,12 @@ def MRAS_Dirichlet(args, game_i, l=0.2, pbar=None, summation=1000):
         t = 0
         for j in range(len(phases)):
             # Between 0 and len(game) (not included upper)
+
+            ############################################################
+            # 4. Pull n_k arms, M_k times each
+            ############################################################
             dist = (1 - l) * theta + l * theta_0
-            print(f"Arms dist {dist}")
-            # arms = np.random.choice(len(game), phases[j], p=dist)
+            # print(f"Arms dist {dist}")
             arms1 = np.random.dirichlet(dist, phases[j])
             arms = np.argmax(arms1, axis=1)
             mask = np.zeros(len(game))
@@ -173,32 +224,14 @@ def MRAS_Dirichlet(args, game_i, l=0.2, pbar=None, summation=1000):
                         break
 
             ###########################################
-            # 1. Update theta
+            # 5. Update theta
             ##########################################
-            C = 1
-            # for i in range(len(theta)):
-            #     num = 0
-            #     den = 0
-            #     for arm in arms1:
-            #         a = np.argmax(arm)
-            #         num += np.exp(C * sample_mean[a]) * (np.log(arms1[i][a])) / dirichlet.pdf(arm, theta)
-            #         den += np.exp(C * sample_mean[a]) / dirichlet.pdf(arm, theta)
-            #     theta[i] = summation * num / den
+            theta = update_Dirchlet(j + 1, theta, sample_mean, arms1)
 
-            num = np.zeros_like(theta)
-            denom = np.zeros_like(theta)
-            for arm in arms1:
-                a = np.argmax(arm)
-                num += np.exp(C * sample_mean[a]) * (np.log(arm)) / dirichlet.pdf(arm, theta)
-                denom += np.exp(C * sample_mean[a]) / dirichlet.pdf(arm, theta)
-
-            theta = summation * np.exp(num / denom)
-
-            print(f"Phase {j + 1} Arms {arms} theta {theta}")
+        print(f"Phase {j + 1} Arms {arms} theta {theta}")
 
         regret_exp_ll = np.cumsum(regret_exp_ll)
         regret_ll += regret_exp_ll
-        # print(f"Regret {regret_exp_ll}")
 
     regret_ll = regret_ll / args.repeat
 
@@ -214,4 +247,5 @@ def main(_run):
     args = _run.config
     print(f"Configs used {args}")
     args = tupperware(args)
-    MRAS_Categorical(args, game_i=1, l=0.1)
+    MRAS_Dirichlet(args, game_i=1, l=0.1, pbar=None)
+    # MRAS_Categorical(args, game_i=1, l=0.1, pbar=None)

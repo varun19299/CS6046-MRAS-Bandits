@@ -89,5 +89,5 @@ def main(_run):
     print(f"Configs used {args}")
     args = tupperware(args)
 
-    regret_ll, _, _ = TS_beta(args, game_i=0, params=(1, 1), pbar=tqdm(range(3)))
+    regret_ll, _, _ = TS_beta(args, game_i=1, params=(1, 1), pbar=tqdm(range(3)))
     print(f"TS regret {regret_ll}")
