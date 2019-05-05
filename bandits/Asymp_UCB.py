@@ -53,6 +53,8 @@ def Asymp_UCB(args, game_i, l=0.2, pbar=None):
             arm_exp_ll[t] = arm
             reward_exp_ll[t] = game.get_reward(arm)
             regret_exp_ll[t] = best_reward- reward_exp_ll[t]
+            samples[arm]+= reward_exp_ll[t]
+            times[arm]+=1
             
         regret_exp_ll = np.cumsum(regret_exp_ll)
         regret_ll += regret_exp_ll
