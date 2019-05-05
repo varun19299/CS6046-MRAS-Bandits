@@ -20,7 +20,12 @@ ex.add_config('configs/base-config.yaml')
 
 
 def KL_div(a,b):
-    return a*np.log(a/b)+(1-a)*np.log((1-a)/1-b)
+    if a!=0 and b!=0 and b!=1 and a!=1:
+        return a*np.log(a/b)+(1-a)*np.log((1-a)/(1-b))
+    elif a==1 and b!=0:
+        return -np.log(b)
+    else:
+        return 0.0001
 def maxQ(p,C):
     qlist = []
     eps = 0.001
