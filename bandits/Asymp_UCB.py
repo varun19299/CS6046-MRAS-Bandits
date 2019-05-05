@@ -48,7 +48,7 @@ def Asymp_UCB(args, game_i, l=0.2, pbar=None):
         for t in range(len(game)+1, args.n):
             conf_vector = np.zeros(len(game))
             for i in range(len(game)):
-                conf_vector[i] = (samples[i]/times[i])+np.sqrt(2*np.log(1+t*np.log(t)*np.log(t)))
+                conf_vector[i] = (samples[i]/times[i])+np.sqrt(2*np.log(1+t*np.log(t)*np.log(t))/times[i])
             arm = np.argmax(conf_vector)
             arm_exp_ll[t] = arm
             reward_exp_ll[t] = game.get_reward(arm)
@@ -71,4 +71,4 @@ def main(_run):
     args = _run.config
     print(f"Configs used {args}")
     args = tupperware(args)
-    MRAS(args, game_i=0, l=0.1)
+    Asymp_UCB(args, game_i=0, l=0.1)
