@@ -247,5 +247,5 @@ def main(_run):
     args = _run.config
     print(f"Configs used {args}")
     args = tupperware(args)
-    MRAS_Dirichlet(args, game_i=1, l=0.1, pbar=None)
-    # MRAS_Categorical(args, game_i=1, l=0.1, pbar=None)
+    # MRAS_Dirichlet(args, game_i=0, l=0.1, pbar=None)
+    MRAS_Categorical(args, game_i=0, l=0.1, pbar=None)
