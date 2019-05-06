@@ -43,7 +43,10 @@ def update_Categorical(phase, theta, sample_mean, mask, C=10, epsilon=1e-12, upp
     :return: theta
     '''
     num = np.exp(C * phase * sample_mean, dtype=np.float128)
-    # num = C * phase * sample_mean
+    # num = np.nan_to_num(np.exp(C * phase * sample_mean))
+    # num = np.minimum(num, np.ones_like(num)*1e10)
+    # num = np.maximum(num, np.ones_like(num) * 1e-10)
+    # print(num)
     theta[np.where(theta == 0)] = C
 
     # small epsilon for ill conditioned
@@ -71,9 +74,11 @@ def update_Dirchlet(phase, theta, sample_mean, arms1, C=1, summation=1000, epsil
     pdf = (dirichlet.pdf(arms1.T, theta) + epsilon)
     if len(a_ll) > 1:
         pdf = pdf.reshape((len(pdf), 1))
-    num = np.exp(C * (phase + 1) * sample_mean[a_ll], dtype=np.float128) @ (np.log(arms1) / pdf)
+    # num = np.exp(C * (phase + 1) * sample_mean[a_ll]) @ (np.log(arms1) / pdf)
+    # print(num)
+    num = np.exp(C * phase * sample_mean[a_ll], dtype=np.float128) @ (np.log(arms1) / pdf)
     denom = np.sum(
-        np.exp(C * (phase + 1) * sample_mean[a_ll], dtype=np.float128) / dirichlet.pdf(arms1.T, theta) + epsilon,
+        np.exp(C * phase * sample_mean[a_ll], dtype=np.float128) / dirichlet.pdf(arms1.T, theta) + epsilon,
         axis=0)
 
     # num = np.zeros_like(theta)
@@ -260,8 +265,135 @@ def MRAS_Dirichlet(args, game_i, l=0.2, pbar=None):
 
     return regret_ll, var_regret_ll
 
+def MRAS_Dirichlet_Corrected(args, game_i, l=0.2,N=60, pbar=None):
+    game_ll = args.games[game_i]
+    game = Game(game_ll)
+    best_reward, best_arm = np.max(game.game_ll), np.argmax(game.game_ll)
 
-def MRAS_Categorical_Corrected(args, game_i, l=0.2, pbar=None):
+    regret_ll = np.zeros(args.n)
+    var_regret_ll = np.zeros(args.n)
+    theta_0 = np.ones(len(game)) * 10
+
+    for exp in range(args.repeat):
+        ############################################################
+        # 1. Rewards collected and optimal arm pull (for experiment)
+        ############################################################
+
+        reward_exp_ll = np.zeros(args.n)
+        regret_exp_ll = np.zeros(args.n)
+        sample_mean = np.zeros(len(game))
+        n_pulls = np.zeros(len(game))
+
+        ############################################################
+        # 2. Initialise Theta
+        ############################################################
+        theta = theta_0
+
+        ############################################################
+        # 3. Set phase
+        ############################################################
+        phases = args.n // len(game) * [len(game)]
+        if args.n % len(game):
+            phases += [args.n % len(game)]
+        phases = np.array(phases)
+        pulls = np.ones_like(phases)
+        # phases, pulls = get_phases_pulls(args.n)
+
+        pulls = np.arange(20, args.n + 1)
+        t = 0
+        # Start with N samples
+        kai = 0
+        rho = 0.1
+        epi_J = 1e-3
+        j = 0
+        a = 1.5
+
+        while t < args.n:
+            # Between 0 and len(game) (not included upper)
+
+            ############################################################
+            # 4. Pull n_k arms, M_k times each
+            ############################################################
+            dist = (1 - l) * theta + l * theta_0
+            J_vec = np.zeros(N)
+            J_vec_arms = np.zeros(N, dtype=np.int)
+            # print(f"Arms dist {dist}")
+            arms1 = np.random.dirichlet(dist, phases[j])
+            arms = np.argmax(arms1, axis=1)
+            mask = np.zeros(len(game))
+
+            for e, arm in enumerate(arms):
+                for _ in range(pulls[j]):
+                    reward = game.get_reward(arm)
+                    reward_exp_ll[t] = reward
+                    mask[arm] += 1
+                    regret_exp_ll[t] = best_reward - reward
+                    n_pulls[arm] += 1
+                    sample_mean[arm] += (reward - sample_mean[arm]) / n_pulls[arm]
+                    J_vec[e] += reward / pulls[j]
+                    t += 1
+
+                    if t >= args.n:
+                        break
+                J_vec_arms[e] = arm
+                if t >= args.n:
+                    break
+
+            j +=1
+
+            k = int((1 - rho) * N) - 1
+            kai_ = np.partition(J_vec, k)[k]
+            print(J_vec)
+            # sys.exit(0)
+
+            if kai_ > kai:
+                kai = kai_
+            else:
+                N = int(N * a)
+
+            print(kai)
+
+
+            # print(kai)
+            # print(J_vec_arms[np.where(J_vec < kai)])
+            mask = np.zeros_like(theta)
+            # print(J_vec_arms[np.where(J_vec >= kai)])
+            for arm in J_vec_arms[np.where(J_vec >= kai)]:
+                mask[arm] += 1
+
+            if len(J_vec_arms[np.where(J_vec >= kai)]):
+                theta = update_Dirchlet(j + 1, theta, sample_mean, arms1)
+            else:
+                l *= 0.9
+
+            j += 1
+
+            ###########################################
+            # 5. Update theta
+            ##########################################
+            # theta = update_Dirchlet(j + 1, theta, sample_mean, arms1)
+
+        if pbar:
+            pbar.set_description(f"MRAS Dirichlet Game {game_i + 1} Exp {exp} Phase {j + 1} Arms {arms}")
+        else:
+            print(f"Phase {j + 1} Arms {arms} theta {theta}")
+
+        regret_exp_ll = np.cumsum(regret_exp_ll)
+        regret_ll += regret_exp_ll
+
+    regret_ll = regret_ll / args.repeat
+
+    var_regret_ll /= args.repeat
+    var_regret_ll -= regret_ll ** 2
+    var_regret_ll /= np.arange(1, args.n + 1)
+    var_regret_ll = np.sqrt(var_regret_ll)
+    print(f"Overall regret {regret_ll}")
+
+    return regret_ll, var_regret_ll
+
+
+
+def MRAS_Categorical_Corrected(args, game_i, l=0.2, N =100, pbar=None):
     game_ll = args.games[game_i]
     game = Game(game_ll)
     best_reward, best_arm = np.max(game.game_ll), np.argmax(game.game_ll)
@@ -297,15 +429,14 @@ def MRAS_Categorical_Corrected(args, game_i, l=0.2, pbar=None):
         # pulls = np.ones_like(phases)
         # phases, pulls = get_phases_pulls(args.n)
 
-        pulls = np.arange(10, args.n + 1)
+        pulls = np.arange(20, args.n + 1)
         t = 0
-        # Start with N pulls
-        N = 10
+        # Start with N samples
         kai = 0
-        rho = 0.1
+        rho = 0.7
         epi_J = 1e-3
         j = 0
-        a = 1.1
+        a = 1.5
 
         while t < args.n:
             # Between 0 and len(game) (not included upper)
@@ -351,11 +482,17 @@ def MRAS_Categorical_Corrected(args, game_i, l=0.2, pbar=None):
 
             # print(kai)
             # print(J_vec_arms[np.where(J_vec < kai)])
-            mask[J_vec_arms[np.where(J_vec < kai)]] = 0
+            mask = np.zeros_like(theta)
+            # print(J_vec_arms[np.where(J_vec >= kai)])
+            for arm in J_vec_arms[np.where(J_vec >= kai)]:
+                mask[arm] += 1
 
-        theta = update_Categorical(j + 1, theta, sample_mean, mask)
-        l *= 0.998
-        j += 1
+            if len(J_vec_arms[np.where(J_vec >= kai)]):
+                theta = update_Categorical(j + 1, theta, sample_mean, mask)
+            else:
+                l *= 0.98
+
+            j += 1
 
         if pbar:
             pbar.set_description(f"MRAS Categ Game {game_i + 1} Exp {exp} Phase {j + 1} Arms {arms}")
@@ -373,7 +510,7 @@ def MRAS_Categorical_Corrected(args, game_i, l=0.2, pbar=None):
     var_regret_ll = np.sqrt(var_regret_ll)
     print(f"Overall regret {regret_ll}")
 
-    return regret_ll, var_regret_ll
+    return regret_ll#, var_regret_ll
 
 
 @ex.automain
@@ -382,6 +519,6 @@ def main(_run):
     print(f"Configs used {args}")
     args = tupperware(args)
     MRAS_Categorical_Corrected(args, game_i=0, l=0.1, pbar=None)
-    # regret = MRAS_Categorical(args, game_i=0, l=0.1, pbar=None)
+    # regret = MRAS_Dirichlet(args, game_i=0, l=0.1, pbar=None)
     # plt.plot(regret)
     # plt.show()
