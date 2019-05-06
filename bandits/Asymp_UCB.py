@@ -47,14 +47,18 @@ def Asymp_UCB(args, game_i, l=0.2, pbar=None):
         
         for t in range(len(game)+1, args.n):
             conf_vector = np.zeros(len(game))
-            for i in range(len(game)):
-                conf_vector[i] = (samples[i]/times[i])+np.sqrt(2*np.log(1+t*np.log(t)*np.log(t))/times[i])
+            # for i in range(len(game)):
+            #     conf_vector[i] = (samples[i]/times[i])+np.sqrt(2*np.log(1+t*np.log(t)*np.log(t))/times[i])
+            conf_vector = (samples / times) + np.sqrt(2 * np.log(1 + t * np.log(t) * np.log(t)) / times)
             arm = np.argmax(conf_vector)
             arm_exp_ll[t] = arm
             reward_exp_ll[t] = game.get_reward(arm)
             regret_exp_ll[t] = best_reward- reward_exp_ll[t]
             samples[arm]+= reward_exp_ll[t]
             times[arm]+=1
+
+        if pbar:
+            pbar.set_description(f"Game_{game_i + 1}_Asym_UCB_{l}_exp_{exp}_arm_{arm}")
             
         regret_exp_ll = np.cumsum(regret_exp_ll)
         regret_ll += regret_exp_ll
@@ -67,6 +71,8 @@ def Asymp_UCB(args, game_i, l=0.2, pbar=None):
     var_regret_ll /= np.arange(1, args.n + 1)
     var_regret_ll = np.sqrt(var_regret_ll)
     print(f"Overall regret {regret_ll}")
+
+    return regret_ll, var_regret_ll
 
 @ex.automain
 def main(_run):
