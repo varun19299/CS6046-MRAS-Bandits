@@ -4,8 +4,13 @@
 
 Links:
 
-1. [Proposal](https://v2.overleaf.com/7411697396mqnwzscjbcpk)
-2. [Report](https://v2.overleaf.com/5765213179dtsqytjzbyjz) 
+1. [Proposal](proposal.pdf)
+2. [Report](report.pdf) 
+
+## TODO
+
+1. [ ] Fix MRAS-Categorical-Subset reproducibility
+2. [ ] Tune MRAS-Dirchlet-Subset
 
 ## Install and Run
 
@@ -22,25 +27,23 @@ python sim.py
 
 * UCB
 * Thomson Sampling
-
-TO ADD:
-
-* KL-UCB
-* Other UCB Variants
+* Aysm-UCB
+* KL-UCB (Needs to be sped up)
 
 ## Simulation Experiments
 
 We try the following parameter distributions:
 
 1. [x] Categorical
-2. [ ] Dirchlet
-3. [ ] Gaussian
+2. [x] Dirchlet
+3. [x] Gaussian
 
 We also experiment with the following:
 
-1. Increasing function H.
+1. Increasing function `H`.
 2. Exploitation param `lambda`.
-3. Arm phasing `n_k` and `M_k`.
+3. Simulation allocation `M_k`.
+4. Population size `N_o`
 
 ## Adding a new algorithm
 
@@ -58,5 +61,5 @@ If you need very different args, create a new config file and run as:
 
 ## Critical Checks
 
-1. Is regret being computed correctly? Right now we are accumulating (best_mean - reward). This could be negative, but averaged over experiments is positive.
-2. Is the UCB implementation correct?
+1. [x] Is regret being computed correctly? Right now we are accumulating (best_mean - reward). This could be negative, but averaged over experiments is positive.
+2. [x] Is the UCB implementation correct?
