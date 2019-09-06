@@ -110,7 +110,7 @@ def main(_run):
         D = {}
 
         ######################
-         UCB
+        # UCB
         ######################
 
         for alpha in [2]:
@@ -133,7 +133,7 @@ def main(_run):
             D[f'TS-beta-params-{params}'] = d
 
         ######################
-        Asym UCB
+        # Asym UCB
         ######################
 
         d = {}
@@ -143,7 +143,7 @@ def main(_run):
         D['Asym-UCB'] = d
 
         ######################
-        MRAS Categ
+        # MRAS Categ
         ######################
 
         d = {}
@@ -153,7 +153,7 @@ def main(_run):
         D['MRAS-Categ-exp'] = d
 
         ######################
-        MRAS Categ Corrected
+        # MRAS Categ Corrected
         ######################
 
         d = {}
@@ -167,7 +167,7 @@ def main(_run):
         D['MRAS-Categ-Subset-exp'] = d
 
         ######################
-        MRAS Dirichlet
+        # MRAS Dirichlet
         ######################
 
         d = {}
@@ -180,7 +180,7 @@ def main(_run):
         gap_indep, gap_dep = regret_lower_bounds(args, game_i)
 
         ######################
-        Gap Indep
+        # Gap Indep
         ######################
 
         d= {}
@@ -189,15 +189,15 @@ def main(_run):
         D['gap-indpendent-minimax'] = d
 
         ######################
-        Gap Dependent
+        # Gap Dependent
         ######################
         d = {}
         d['regret'] = gap_dep
         d['var'] = np.zeros_like(gap_dep)
         D['gap-dependent-minimax'] = d
 
-    # plot_regret(D, game_i, args, supress=False)
-    # plot_prob_arm(D, game_i, args, supress=True)
+    plot_regret(D, game_i, args, supress=False)
+    plot_prob_arm(D, game_i, args, supress=True)
     # x = np.arange(1, args.n + 1, 1)
     # legend = []
     # for i in [30, 60, 80, 100, 120]:

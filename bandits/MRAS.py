@@ -510,7 +510,7 @@ def MRAS_Categorical_Corrected(args, game_i, l=0.2, N =100, pbar=None):
     var_regret_ll = np.sqrt(var_regret_ll)
     print(f"Overall regret {regret_ll}")
 
-    return regret_ll#, var_regret_ll
+    return regret_ll, var_regret_ll
 
 
 @ex.automain
