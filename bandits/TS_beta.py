@@ -85,11 +85,9 @@ def TS_beta(args, game_i, params, pbar=None):
 
 @ex.automain
 def main(_run):
-    args = _run.config
-    print(f"Configs used {args}")
-    args = tupperware(args)
+    args = tupperware(_run.config)
 
-    regret_ll, _, _ = TS_beta(args, game_i=1, params=(1, 1), pbar=tqdm(range(3)))
+    regret_ll, _, _ = TS_beta(args, game_i=0, params=(1, 1), pbar=tqdm(range(3)))
     print(f"TS regret {regret_ll}")
     plt.plot(regret_ll)
     plt.show()
