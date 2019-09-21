@@ -174,12 +174,15 @@ def MRAS_categ_elite(
                 regret_exp_ll[count] = best_reward - reward
                 pulls_ll[arm] += 1
                 sample_mean_ll[arm] += (reward - sample_mean_ll[arm]) / pulls_ll[arm]
-                J_vec[e] = sample_mean_ll[arm]
+                # J_vec[e] = sample_mean_ll[arm]
                 J_vec_arms[e] = arm
                 count += 1
 
                 if count >= args.n:
                     break
+
+            for e in range(len(J_vec_arms)):
+                J_vec[e] = sample_mean_ll[J_vec_arms[e]]
 
             # Update elite set
             k = int((1 - rho) * N) - 1
@@ -252,14 +255,14 @@ def main(_run):
 
     regret_ll, _, arm_ll = MRAS_categ_elite(
         args,
-        game_i=1,
-        N_0=1000,
+        game_i=2,
+        N_0=400,
         alpha=1,
         kai_0=0,
         rho_0=0.7,
         epi_J=1e-6,
         pbar=tqdm(range(args.repeat)),
-        verbose=True
+        verbose=True,
     )
     print(f"Arms pulled {arm_ll}")
     print(f"MRAS regret {regret_ll}")

@@ -2,10 +2,10 @@
 exp_name: 'base-config'
 
 # event horizon
-n: 1000000
+n: 10000
 
 # repeat the experiment 100 times.
-repeat: 20
+repeat: 200
 
 # Bernouli distributed
 games:
